@@ -6,7 +6,7 @@ This fork adds an optional native Linux x86-64 NGX backend alongside the existin
 
 The standalone Vulkan probe runs real DLSS Super Resolution on an RTX 3070 with NVIDIA driver 615.78.08. Nine evaluations cover two resolutions, retained history, scene resets, feature recreation, and oversized backing images with a smaller active render subrect. Khronos synchronization validation reports no errors. An absent runtime fails feature discovery as expected.
 
-The [production adapter probe](../tools/linux-ngx-backend-probe.md) additionally runs the emulator's real device, allocator, scheduler and NGX adapter without starting a frontend or game. It checks 32 evaluations, including MKW's captured formats and active resolution, forward/reversed depth, DLAA, invalid-input rejection and device recreation.
+The [production adapter probe](../tools/linux-ngx-backend-probe.md) additionally runs the emulator's real device, allocator, scheduler and NGX adapter without starting a frontend or game. It checks 40 evaluations, including MKW's captured formats and active resolution, forward/reversed depth, DLAA, invalid-input rejection and device recreation.
 
 The recognized game replacement paths remain title-specific. Fire Emblem has a temporal input contract; Star Fox retains its spatial path. Mario Kart World's saved race captures now identify pre-HUD scene color, depth and current/previous camera matrices. Tested camera reprojection and jitter helpers are available, but moving-object motion, coherent scene jitter and the renderer hook remain unfinished. Its name or the NVIDIA setting alone does not cause an evaluation. See the [MKW investigation](mkw-dlss-investigation.md). The upstream docked-photo-mode bilinear fix is not a temporal-racing integration.
 

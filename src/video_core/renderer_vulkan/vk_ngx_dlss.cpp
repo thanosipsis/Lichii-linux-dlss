@@ -24,7 +24,7 @@ constexpr VkImageUsageFlags OUTPUT_USAGE = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE
                                            VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 NVSDK_NGX_PerfQuality_Value ModeFor(VkExtent2D render, VkExtent2D output) {
     const float ratio = static_cast<float>(render.width) / output.width;
-    if (ratio >= 0.99f)
+    if (render.width == output.width && render.height == output.height)
         return NVSDK_NGX_PerfQuality_Value_DLAA;
     if (ratio >= 0.65f)
         return NVSDK_NGX_PerfQuality_Value_MaxQuality;
@@ -138,7 +138,7 @@ NgxDlssUpscaler::NgxDlssUpscaler(const Device& device_, Scheduler& scheduler_,
         .unnormalizedCoordinates = VK_FALSE,
     });
     std::scoped_lock lock{Ngx::ApiMutex()};
-    const auto result = NVSDK_NGX_VULKAN_GetCapabilityParameters(&state->parameters);
+    const auto result = NVSDK_NGX_VULKAN_AllocateParameters(&state->parameters);
     if (NVSDK_NGX_FAILED(result) || !state->parameters) {
         if (state->parameters)
             NVSDK_NGX_VULKAN_DestroyParameters(state->parameters);

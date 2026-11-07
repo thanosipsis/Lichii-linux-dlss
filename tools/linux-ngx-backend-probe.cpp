@@ -243,6 +243,11 @@ void Run(bool validation) {
                  {640, 360},
                  VK_FORMAT_R16G16B16A16_SFLOAT,
                  VK_FORMAT_D32_SFLOAT},
+            Case{{640, 360},
+                 {640, 360},
+                 {641, 361},
+                 VK_FORMAT_R16G16B16A16_SFLOAT,
+                 VK_FORMAT_D32_SFLOAT},
         };
         for (const auto& test : cases) {
             InputImage color{device, allocator, test.color, test.backing,
@@ -340,7 +345,7 @@ int main(int argc, char** argv) {
             Run(validation); // Recreate all production device, scheduler and NGX
                              // state.
             Require(validation_errors == 0, "Vulkan validation reported errors");
-            std::cout << "PASS: 32 production-adapter evaluations, invalid inputs, "
+            std::cout << "PASS: 40 production-adapter evaluations, invalid inputs, "
                          "resize, depth convention changes, DLAA and device recreation\n";
         }
     } catch (const std::exception& error) {

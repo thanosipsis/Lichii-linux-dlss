@@ -30,7 +30,7 @@ the probe still evaluates and checks pixels but does not establish validation
 coverage. The executable is deliberately separate from CTest because it requires
 an NVIDIA GPU, the external proprietary runtime, and optionally validation layers.
 
-The probe runs 32 evaluations across two complete device/NGX lifetimes. Cases cover
+The probe runs 40 evaluations across two complete device/NGX lifetimes. Cases cover
 RGBA16F/D32 inputs at 640×360→960×540, 800×450→1200×675 with 832×480 backing images,
 Mario Kart World's B10G11R11/D24S8 formats at 1248×700→1920×1080, and 640×360 DLAA.
 Each case checks retained history, nonzero jitter, reset after a scene-color change,
@@ -41,7 +41,7 @@ geometry, missing views, insufficient backing extents, nonfinite/out-of-range
 jitter, zero motion scales, aliased inputs and output feedback. Rejected inputs
 must leave the adapter usable for the next valid evaluation.
 
-On the RTX 3070, NVIDIA driver 615.78.08 and DLSS runtime 310.9.16, all 32
+On the RTX 3070, NVIDIA driver 615.78.08 and DLSS runtime 310.9.16, all 40
 evaluations passed with clean Khronos synchronization validation. Empty-runtime
 discovery was rejected as expected. These uniform-color scenes establish execution,
 resource handling and readback. They cannot establish moving-object motion,
@@ -49,3 +49,5 @@ depth-edge reconstruction, jitter correctness during rendering, game image quali
 or performance. The MKW math helpers and captured viewport evidence are documented
 in [the investigation](../docs/mkw-dlss-investigation.md); race integration remains
 unfinished.
+
+The near-equal 640×360→641×361 case checks that NGX DLAA is selected only for exactly equal input/output extents. Evaluation parameters use a separately allocated NGX parameter map rather than pre-populating capability queries. See larryliu985/Eglantine commit 1176220760758bf5e1c5cc2ef184325bd742f8ef for the independent implementation reviewed for this change; NVIDIA’s SDK permits both map types, while recommending capability maps for capability queries.
