@@ -566,6 +566,11 @@ if (ENABLE_LINUX_NVIDIA_DLSS)
     target_include_directories(video_core SYSTEM PRIVATE "${NGX_INCLUDE_DIR}")
     target_link_libraries(video_core PRIVATE "${NGX_LIBRARY}" ${CMAKE_DL_LIBS})
     target_compile_definitions(video_core PUBLIC EGLANTINE_NGX EGLANTINE_DLSS)
+    if (YUZU_TESTS)
+        add_executable(ngx_backend_probe ../../tools/linux-ngx-backend-probe.cpp
+            ../../tools/linux-ngx-backend-vma.cpp ../../src/tests/common/undefined_fix.cpp)
+        target_link_libraries(ngx_backend_probe PRIVATE common core audio_core input_common video_core frontend_common)
+    endif()
 endif()
 
 create_target_directory_groups(video_core)

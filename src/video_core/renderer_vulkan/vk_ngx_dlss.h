@@ -31,7 +31,7 @@ public:
 
     struct Inputs {
         Image color;          ///< Jittered linear colour at the render size.
-        Image depth;          ///< Device depth (reversed) at the render size.
+        Image depth;          ///< Device depth at the render size.
         Image motion_vectors; ///< Motion to the previous frame at the render size.
         VkExtent2D render_size;
         VkExtent2D upscale_size;
@@ -40,6 +40,7 @@ public:
         /// Turns a motion vector into render pixels (the render size for UV offsets).
         std::array<f32, 2> motion_vector_scale;
         bool reset;
+        bool depth_inverted = true; ///< True when near depth is greater than far depth.
     };
 
     /// Throws vk::Exception when NGX has no DLSS for this device.
@@ -72,6 +73,7 @@ private:
     std::unique_ptr<State> state;
     VkExtent2D render_extent{};
     VkExtent2D upscale_extent{};
+    bool depth_inverted = true;
     u32 frame_index{};
     vk::Image output_image;
     vk::ImageView output_view;
