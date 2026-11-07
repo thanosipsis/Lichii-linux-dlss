@@ -32,8 +32,8 @@
 #include "video_core/vulkan_common/vulkan_device.h"
 #include "video_core/vulkan_common/vulkan_wrapper.h"
 #include "video_core/gpu_logging/gpu_logging.h"
-#ifdef EGLANTINE_STREAMLINE
-#include "video_core/vulkan_common/streamline.h"
+#ifdef EGLANTINE_DLSS
+#include "video_core/vulkan_common/nvidia_dlss.h"
 #endif
 
 #if defined(__ANDROID__) && defined(ARCHITECTURE_arm64)
@@ -749,7 +749,7 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
         RemoveExtensionFeature(extensions.descriptor_buffer, features.descriptor_buffer,
                                VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
     }
-#ifdef EGLANTINE_STREAMLINE
+#ifdef EGLANTINE_DLSS
     // NVIDIA's DLSS needs buffer device addresses: keep the feature enabled for
     // it, but leave Eglantine's own buffers as they are without descriptor buffers.
     const bool dlss_wants_device_address =
@@ -768,12 +768,12 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
     graphics_queue = logical.GetQueue(graphics_family);
     present_queue = logical.GetQueue(present_family);
 
-#ifdef EGLANTINE_STREAMLINE
+#ifdef EGLANTINE_DLSS
     if (streamline_extensions) {
         streamline_attached =
-            Streamline::AttachDevice(instance, physical, *logical, graphics_family, dld);
-    } else if (Streamline::WantsDevice()) {
-        Streamline::Stop();
+            NvidiaDlss::AttachDevice(instance, physical, *logical, graphics_family, dld);
+    } else if (NvidiaDlss::WantsDevice()) {
+        NvidiaDlss::Stop();
     }
 #endif
 
@@ -830,9 +830,9 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR 
 }
 
 Device::~Device() {
-#ifdef EGLANTINE_STREAMLINE
+#ifdef EGLANTINE_DLSS
     if (streamline_attached) {
-        Streamline::Stop();
+        NvidiaDlss::Stop();
     }
 #endif
     SaveStaticPipelineCache();
@@ -1152,10 +1152,13 @@ bool Device::GetSuitability(bool requires_swapchain) {
         extensions.robustness_2 = false;
     }
 
-#ifdef EGLANTINE_STREAMLINE
+#ifdef EGLANTINE_DLSS
     // The extensions NVIDIA's DLSS asks for, where the device has them all.
-    if (Streamline::WantsDevice()) {
-        const std::vector<std::string> wanted = Streamline::DeviceExtensions();
+#ifdef EGLANTINE_NGX
+    if (Ngx::WantsDevice()) Ngx::QueryDeviceExtensions(instance, physical);
+#endif
+    if (NvidiaDlss::WantsDevice()) {
+        const std::vector<std::string> wanted = NvidiaDlss::DeviceExtensions();
         // Streamline may ask for no extensions at all.
         const bool all = std::ranges::all_of(
             wanted, [&](const std::string& name) { return supported_extensions.contains(name); });

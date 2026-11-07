@@ -1,7 +1,8 @@
 # Game-DLSS replacement
 
-The Vulkan renderer can replace a recognized game-DLSS evaluation with NVIDIA DLSS on
-Windows, then AMD FSR 3.1.4 if NVIDIA DLSS is disabled or unavailable. FSR uses AMD's
+The Vulkan renderer can replace a recognized game-DLSS evaluation with NVIDIA DLSS through
+Windows Streamline or the optional native Linux NGX backend, then AMD FSR 3.1.4 if NVIDIA
+DLSS is disabled or unavailable. See [Linux build and runtime instructions](linux-dlss.md). FSR uses AMD's
 eight temporal-upscaling passes, including depth, motion, history and optional RCAS.
 This is separate from the presentation filters that scale the finished window image.
 

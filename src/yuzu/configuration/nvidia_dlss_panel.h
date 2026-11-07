@@ -6,7 +6,7 @@
 
 #pragma once
 
-#ifdef EGLANTINE_STREAMLINE
+#ifdef EGLANTINE_DLSS
 
 #include <QWidget>
 

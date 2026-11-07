@@ -1,0 +1,46 @@
+{
+  "repository": "https://raw.githubusercontent.com/NVIDIA/DLSS",
+  "commit": "9981c6350dc58c0ce21f024fd65e31e851c31689",
+  "files": [
+    {
+      "path": "include/nvsdk_ngx_vk.h",
+      "source": "include/nvsdk_ngx_vk.h",
+      "sha256": "2d364ce7132881eb669e9498fd570d74cba563b1fbebc82c235f8e1ad2dd8b6d"
+    },
+    {
+      "path": "include/nvsdk_ngx_defs.h",
+      "source": "include/nvsdk_ngx_defs.h",
+      "sha256": "ea23f33497cd274860d1c25a97644fce807dcb0037c594547203343103fad03e"
+    },
+    {
+      "path": "include/nvsdk_ngx_defs_vk.h",
+      "source": "include/nvsdk_ngx_defs_vk.h",
+      "sha256": "0a24d0861ace7d6b9362a67b7f08bea1b33ea123c5ce730b19133de8a891d031"
+    },
+    {
+      "path": "include/nvsdk_ngx_helpers_vk.h",
+      "source": "include/nvsdk_ngx_helpers_vk.h",
+      "sha256": "c192bff72138f12f770db48e12c1d8f712dfc81ea0e8e055ebb27d8dd1b31623"
+    },
+    {
+      "path": "include/nvsdk_ngx_params.h",
+      "source": "include/nvsdk_ngx_params.h",
+      "sha256": "943bc8cc5cdae03b6303016fbad3183636f2335ae27a2d18776798c3b4efabbc"
+    },
+    {
+      "path": "lib/libnvsdk_ngx.a",
+      "source": "lib/Linux_x86_64/libnvsdk_ngx.a",
+      "sha256": "d3c50bb0d9624fc35e502a8e929b8fc1e2b505017ebdb84c0d5b627e11a235df"
+    },
+    {
+      "path": "lib/libnvidia-ngx-dlss.so.310.9.16",
+      "source": "lib/Linux_x86_64/rel/libnvidia-ngx-dlss.so.310.9.16",
+      "sha256": "30982c937afed85c96b8d313323de9a650a2eec6de1bb0f714b21750f4ce98f6"
+    },
+    {
+      "path": "lib/LICENSE.txt",
+      "source": "LICENSE.txt",
+      "sha256": "d4216e39ebef5f9b50a6712ebb37beeb5379862a67733a9999c651f21592aaf0"
+    }
+  ]
+}

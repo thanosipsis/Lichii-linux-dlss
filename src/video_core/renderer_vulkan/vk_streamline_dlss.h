@@ -26,6 +26,7 @@ public:
         VkFormat format;
         VkImageSubresourceRange range;     ///< The view's level and layer, with the view's aspect.
         VkImageAspectFlags barrier_aspect; ///< Every aspect of the image's format.
+        VkExtent2D extent; ///< Actual bound image extent, independent of the active subrect.
     };
 
     struct Inputs {

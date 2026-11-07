@@ -1004,11 +1004,8 @@ void KeplerCompute::TraceDlssContract(u64 native_key, bool warn_unvalidated) {
 
 bool KeplerCompute::TryFireEmblemUpscale(bool allow_history) {
     using namespace VideoCommon::FireEmblemUpscale;
-    static const bool requested_history = [] {
-        const char* const option = std::getenv("EDEN_NX2_DLSS_REPLACEMENT");
-        return option && (std::string_view{option} == "fsr" || std::string_view{option} == "dlss");
-    }();
-    const bool use_history = allow_history && requested_history;
+    static const char* const option = std::getenv("EDEN_NX2_DLSS_REPLACEMENT");
+    const bool use_history = UseTemporalHistory(allow_history, option, rasterizer->UsesNvidiaDlss());
     const size_t game_index = dlss_chain.spatial_only ? 1 : 0;
     const char* const game = dlss_chain.spatial_only ? "Star Fox" : "Fire Emblem";
     const auto jitter = fe_upscale_jitter.Take();

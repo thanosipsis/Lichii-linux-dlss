@@ -559,3 +559,51 @@ void NvidiaDlssPanel::Download() {
 }
 
 #endif
+
+#ifdef EGLANTINE_NGX
+#include <cstdlib>
+#include <QDesktopServices>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QShowEvent>
+#include <QUrl>
+#include "video_core/vulkan_common/ngx.h"
+#include "yuzu/configuration/nvidia_dlss_panel.h"
+
+NvidiaDlssPanel::NvidiaDlssPanel(QWidget* parent) : QWidget(parent) {
+    auto* layout = new QHBoxLayout(this);
+    icon_label = new QLabel(this);
+    status_label = new QLabel(this);
+    status_label->setWordWrap(true);
+    folder_button = new QPushButton(tr("Open Folder"), this);
+    download_button = new QPushButton(tr("Get NVIDIA Runtime"), this);
+    layout->addWidget(status_label, 1);
+    layout->addWidget(folder_button);
+    layout->addWidget(download_button);
+    connect(folder_button, &QPushButton::clicked, this, [] {
+        const char* path = std::getenv("EDEN_NGX_DIR");
+        const auto folder = path ? std::filesystem::path{path} : Vulkan::Ngx::UserFolder();
+        std::error_code ec;
+        std::filesystem::create_directories(folder, ec);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QString::fromStdString(folder.string())));
+    });
+    connect(download_button, &QPushButton::clicked, this, &NvidiaDlssPanel::Download);
+    Refresh();
+}
+void NvidiaDlssPanel::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    Refresh();
+}
+void NvidiaDlssPanel::Refresh() {
+    const auto model = Vulkan::Ngx::FindModel();
+    status_label->setText(model.empty()
+        ? tr("NVIDIA's Linux DLSS runtime is missing. Place it in the opened folder.")
+        : tr("Linux DLSS runtime found. GPU and game support are checked when playing."));
+    status_label->setToolTip(QString::fromStdString(model.string()));
+    download_button->setVisible(model.empty());
+}
+void NvidiaDlssPanel::Download() {
+    QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/NVIDIA/DLSS/tree/main/lib/Linux_x86_64/rel")));
+}
+#endif

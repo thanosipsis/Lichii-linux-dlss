@@ -40,6 +40,12 @@ constexpr std::optional<Passes> CapturedPasses(u64 program_id) {
     return std::nullopt;
 }
 
+constexpr bool UseTemporalHistory(bool allow_history, const char* option, bool host_dlss) {
+    if (!allow_history) return false;
+    if (option) return std::string_view{option} == "fsr" || std::string_view{option} == "dlss";
+    return host_dlss;
+}
+
 struct JitterSample {
     GPUVAddr color{};
     u32 width{}, height{};

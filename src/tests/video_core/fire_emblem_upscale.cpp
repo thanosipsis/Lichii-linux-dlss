@@ -231,3 +231,19 @@ TEST_CASE("Star Fox logged native-resolution cutscene colour pair is accepted", 
     alias.address_high.Assign(input.address_high);
     REQUIRE_FALSE(FE::ValidPair(input, alias, true));
 }
+
+TEST_CASE("Host DLSS enables temporal history only for a validated temporal path", "[dlss_contract]") {
+    using VideoCommon::FireEmblemUpscale::UseTemporalHistory;
+    REQUIRE(UseTemporalHistory(true, nullptr, true));
+    REQUIRE_FALSE(UseTemporalHistory(true, nullptr, false));
+    for (const bool host : {false, true}) {
+        REQUIRE(UseTemporalHistory(true, "dlss", host));
+        REQUIRE(UseTemporalHistory(true, "fsr", host));
+        for (const char* option : {"native", "standin", "unknown"}) {
+            REQUIRE_FALSE(UseTemporalHistory(true, option, host));
+        }
+        for (const char* option : {static_cast<const char*>(nullptr), "dlss", "fsr", "native", "standin"}) {
+            REQUIRE_FALSE(UseTemporalHistory(false, option, host));
+        }
+    }
+}
