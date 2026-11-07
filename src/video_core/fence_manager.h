@@ -179,7 +179,11 @@ protected:
 
     virtual ~FenceManager() {
         if constexpr (can_async_check) {
-            fence_thread.request_stop();
+            {
+                // The stop predicate and cv.wait share this lock, so shutdown cannot lose a wakeup.
+                std::scoped_lock lock{guard};
+                fence_thread.request_stop();
+            }
             cv.notify_all();
             fence_thread.join();
         }
