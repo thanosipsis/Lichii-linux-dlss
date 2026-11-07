@@ -1135,6 +1135,12 @@ bool Device::GetSuitability(bool requires_swapchain) {
     FOR_EACH_VK_FEATURE_EXT(FEATURE_EXTENSION);
     FOR_EACH_VK_EXTENSION(EXTENSION);
 
+    if (!requires_swapchain) {
+        RemoveExtension(extensions.swapchain, VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        RemoveExtension(extensions.swapchain_mutable_format,
+                        VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_EXTENSION_NAME);
+    }
+
     extensions.depth_stencil_resolve =
         extensions.depth_stencil_resolve &&
         (instance_version >= VK_API_VERSION_1_2 || extensions.create_renderpass2);
