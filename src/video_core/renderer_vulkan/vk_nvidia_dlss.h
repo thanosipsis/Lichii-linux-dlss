@@ -63,6 +63,10 @@ class NvidiaDlssUpscaler {
     /// layout). Returns false when DLSS can't run, so the caller can fall back to FSR 3.1.
     bool Upscale(const Inputs &inputs);
 
+#ifdef EGLANTINE_NGX
+    bool Prewarm(VkExtent2D render, VkExtent2D output, bool reversed, bool hdr);
+#endif
+
     [[nodiscard]] bool Failed() const noexcept { return failed.load(); }
 
     /// Evaluations that succeeded in this process, for the status bar.
@@ -90,6 +94,10 @@ class NvidiaDlssUpscaler {
     Scheduler &scheduler;
     MemoryAllocator &memory_allocator;
 #ifdef EGLANTINE_NGX
+    bool CreateFeature(VkCommandBuffer command, VkExtent2D render, VkExtent2D output,
+                       bool reversed, bool hdr, bool auto_exposure,
+                       Settings::NvidiaDlssQuality quality, Settings::NvidiaDlssPreset preset,
+                       const char*& failed_step, u32& error);
     void PrepareNeuralRendering(const Inputs& inputs, bool requested);
     std::unique_ptr<VideoCore::NeuralRendering::Backend> neural_rendering;
     VkImageView neural_motion_view{};

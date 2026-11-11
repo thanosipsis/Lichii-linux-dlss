@@ -40,6 +40,10 @@ public:
                    StagingBufferPool& staging, VideoCommon::OcarinaUpscaleBackend backend);
     ~OcarinaUpscaler();
 
+#ifdef EGLANTINE_NGX
+    bool Prewarm(VkExtent2D render, VkExtent2D output);
+#endif
+
     [[nodiscard]] bool EvaluationFailed() const;
     /// Save the 1440p temporal scene copy before the game adds its HUD.
     void SaveSceneReference(VkImageView color);

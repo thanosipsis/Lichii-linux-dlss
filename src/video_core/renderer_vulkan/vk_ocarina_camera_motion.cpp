@@ -813,6 +813,12 @@ OcarinaUpscaler::OcarinaUpscaler(const Device& device, Scheduler& scheduler, Des
 
 OcarinaUpscaler::~OcarinaUpscaler() = default;
 
+#ifdef EGLANTINE_NGX
+bool OcarinaUpscaler::Prewarm(VkExtent2D render, VkExtent2D output) {
+    return impl->dlss && impl->dlss->Prewarm(render, output, false, false);
+}
+#endif
+
 bool OcarinaUpscaler::EvaluationFailed() const {
     return impl->Failed();
 }

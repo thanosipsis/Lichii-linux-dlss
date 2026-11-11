@@ -2812,7 +2812,7 @@ void RasterizerVulkan::TracePendingCpuWrites(bool compute, std::span<const u64> 
     });
 }
 
-bool RasterizerVulkan::OcarinaTemporalEnabled() const {
+bool RasterizerVulkan::OcarinaTemporalEnabled() {
     constexpr u64 ocarina_program = 0x0400486024DEC000ULL;
     if (program_id != ocarina_program || oot_live_failed) {
         return false;
@@ -2821,6 +2821,35 @@ bool RasterizerVulkan::OcarinaTemporalEnabled() const {
         return *oot_backend != VideoCommon::OcarinaUpscaleBackend::Native;
     }
     oot_backend = ResolveOcarinaUpscaler(device);
+#ifdef EGLANTINE_NGX
+    const char* prewarm = std::getenv("EDEN_NX2_DLSS_PREWARM");
+    const auto it = Settings::values.disabled_addons.find(ocarina_program);
+    const bool max_resolution = it == Settings::values.disabled_addons.end() ||
+        std::ranges::find(it->second, "Max Resolution (built-in)") == it->second.end();
+    // The Max Resolution handheld pass remains native in the existing DLSS path.
+    if ((!prewarm || std::string_view{prewarm} != "off") &&
+        *oot_backend == VideoCommon::OcarinaUpscaleBackend::Dlss &&
+        (Settings::IsDockedMode() || !max_resolution)) {
+        try {
+            auto candidate = std::make_unique<OcarinaUpscaler>(
+                device, scheduler, descriptor_pool, compute_pass_descriptor_queue, memory_allocator,
+                staging_pool, *oot_backend);
+            const bool docked = Settings::IsDockedMode();
+            const bool max_docked = docked && max_resolution;
+            const VkExtent2D render = max_docked ? VkExtent2D{2560, 1440}
+                                    : docked ? VkExtent2D{1920, 1080} : VkExtent2D{1440, 810};
+            const bool native = Settings::GetNvidiaDlssRuntimeSettings().quality ==
+                                Settings::NvidiaDlssQuality::Native;
+            const VkExtent2D output = native ? render : max_docked ? VkExtent2D{3840, 2160}
+                                    : docked ? VkExtent2D{2560, 1440} : VkExtent2D{1920, 1080};
+            if (candidate->Prewarm(render, output)) {
+                oot_live_dlss = std::move(candidate);
+            }
+        } catch (const vk::Exception& error) {
+            LOG_WARNING(Render_Vulkan, "NGX prewarm unavailable: {}", error.what());
+        }
+    }
+#endif
     if (*oot_backend == VideoCommon::OcarinaUpscaleBackend::Native &&
         Settings::values.ocarina_fsr.GetValue() && !Fsr3Upscaler::IsSupported(device)) {
         LOG_WARNING(Render_Vulkan, "Ocarina FSR 3.1 unsupported on this device; using native upscale");

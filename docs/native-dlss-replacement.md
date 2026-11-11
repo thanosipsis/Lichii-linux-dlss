@@ -57,6 +57,11 @@ the game keeps its own pass whenever DLSS is off, unavailable or fails to start.
   runs at 1:1 (`c033c3ddc9f0897b`, 1920x1080 to 1920x1080); the game's final pass then scales to
   its 2560x1440 output. FSR replaces it as native anti-aliasing (no upscale). DLSS leaves the
   game's pass there (DLAA through it is untested).
+- On Linux, an enabled NVIDIA backend attempts to reserve the Ocarina DLSS feature before the game
+  fills the Vulkan memory budget. The estimate follows docked mode, the built-in Max Resolution
+  add-on and Native quality. An unrecognized resolution may need reallocation. Set
+  `EDEN_NX2_DLSS_PREWARM=off` to disable the reservation for diagnostics; a failed reservation
+  falls back to the ordinary initialization path.
 - The game has no motion vectors or jitter. Motion comes from the scene depth reprojected
   through this and the previous frame's camera (vertex constant buffer 3). Link's recognized
   skinned draw is replayed with both poses where his depth matches. Without his pose the frame
@@ -161,6 +166,10 @@ executable's `streamline` directory. It verifies the interposer signature and su
 NVIDIA app's signed DLSS model. The UI and Windows loading path require Windows validation.
 
 ## Provenance
+
+The native Linux NGX path supplies a device-procedure wrapper for barriers recorded by NGX. It
+adds transfer-write synchronization to matching image transitions to address validation hazards
+observed with DLSS 310.9.16. This workaround needs testing with additional drivers and runtimes.
 
 This backport is AI-assisted and requires human review and testing before distribution.
 It carries upstream work by Duck912 from Eglantine commits `08dbcc7e3b3d`, `11cebf56014a`

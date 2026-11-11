@@ -144,6 +144,120 @@ NvidiaDlssUpscaler::~NvidiaDlssUpscaler() {
         api.destroy_parameters(parameters);
 }
 
+// Called on the scheduler worker, which serializes NGX parameter and feature operations.
+bool NvidiaDlssUpscaler::CreateFeature(VkCommandBuffer command, VkExtent2D render,
+                                       VkExtent2D output, bool reversed, bool hdr,
+                                       bool auto_exposure, Settings::NvidiaDlssQuality quality,
+                                       Settings::NvidiaDlssPreset preset, const char*& failed_step,
+                                       u32& error) {
+    const auto& api = Ngx::GetApi();
+    if (!parameters) {
+        const auto result = api.allocate_parameters(&parameters);
+        if (NVSDK_NGX_FAILED(result) || !parameters) {
+            failed_step = "parameter allocation";
+            error = static_cast<u32>(result);
+            return false;
+        }
+    }
+    if (feature) return true;
+    NVSDK_NGX_Parameter* caps{};
+    const auto cap_result = api.capabilities(&caps);
+    SCOPE_EXIT { if (caps) api.destroy_parameters(caps); };
+    if (NVSDK_NGX_FAILED(cap_result) || !caps) {
+        failed_step = "capability query";
+        error = static_cast<u32>(cap_result);
+        return false;
+    }
+    namespace Mode = VideoCommon::DlssMode;
+    const auto selected = Mode::Select(
+        quality, {render.width, render.height}, {output.width, output.height},
+        [&](Settings::NvidiaDlssQuality mode) { return QueryRange(caps, output, mode); });
+    if (selected.fallback) {
+        LOG_WARNING(Render_Vulkan, "NVIDIA DLSS requested {} but using {} for {}x{} -> {}x{}",
+                    Settings::CanonicalizeEnum(quality),
+                    selected.mode ? Settings::CanonicalizeEnum(*selected.mode) : "FSR 3.1",
+                    render.width, render.height, output.width, output.height);
+    }
+    if (!selected.mode) {
+        failed_step = "unsupported render/output size";
+        error = static_cast<u32>(NVSDK_NGX_Result_FAIL_InvalidParameter);
+        return false;
+    }
+    evaluated_mode = *selected.mode;
+    const auto model = PresetFor(preset);
+    LOG_INFO(Render_Vulkan, "NVIDIA DLSS (NGX): {}x{} -> {}x{}, mode {}, preset {}, {}",
+             render.width, render.height, output.width, output.height,
+             Settings::CanonicalizeEnum(evaluated_mode), model, hdr ? "HDR" : "LDR");
+    parameters->Reset();
+    parameters->Set(NVSDK_NGX_Parameter_Width, render.width);
+    parameters->Set(NVSDK_NGX_Parameter_Height, render.height);
+    parameters->Set(NVSDK_NGX_Parameter_OutWidth, output.width);
+    parameters->Set(NVSDK_NGX_Parameter_OutHeight, output.height);
+    parameters->Set(NVSDK_NGX_Parameter_PerfQualityValue, static_cast<int>(ModeFor(evaluated_mode)));
+    int flags = NVSDK_NGX_DLSS_Feature_Flags_MVLowRes;
+    if (reversed) flags |= NVSDK_NGX_DLSS_Feature_Flags_DepthInverted;
+    if (hdr) flags |= NVSDK_NGX_DLSS_Feature_Flags_IsHDR;
+    if (auto_exposure) flags |= NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
+    parameters->Set(NVSDK_NGX_Parameter_DLSS_Feature_Create_Flags, flags);
+    parameters->Set(NVSDK_NGX_Parameter_CreationNodeMask, 1u);
+    parameters->Set(NVSDK_NGX_Parameter_VisibilityNodeMask, 1u);
+    for (const char* key : {NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_DLAA,
+                            NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Quality,
+                            NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Balanced,
+                            NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Performance,
+                            NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_UltraPerformance,
+                            NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_UltraQuality}) {
+        parameters->Set(key, model);
+    }
+    const auto result = api.create(*device.GetLogical(), command,
+                                   NVSDK_NGX_Feature_SuperSampling, parameters, &feature);
+    if (NVSDK_NGX_FAILED(result) || !feature) {
+        failed_step = "feature creation";
+        error = static_cast<u32>(result);
+        return false;
+    }
+    return true;
+}
+
+bool NvidiaDlssUpscaler::Prewarm(VkExtent2D render, VkExtent2D output, bool reversed, bool hdr) {
+    if (failed || output_image || !render.width || !render.height || !output.width ||
+        !output.height || render.width > output.width || render.height > output.height) {
+        return false;
+    }
+    CreateOutput(output);
+    render_extent = render;
+    upscale_extent = output;
+    depth_inverted = reversed;
+    hdr_input = hdr;
+    const auto settings = Settings::GetNvidiaDlssRuntimeSettings();
+    quality_mode = settings.quality;
+    model_preset = settings.preset;
+    const bool use_hdr = hdr && EnvInt("EDEN_NX2_DLSS_HDR", 1) != 0;
+    const bool auto_exposure = hdr && EnvInt("EDEN_NX2_DLSS_AUTO_EXPOSURE", 1) != 0;
+    bool ready = false;
+    scheduler.RequestOutsideRenderPassOperationContext();
+    scheduler.Record([&, render, output, reversed, use_hdr, auto_exposure, settings](vk::CommandBuffer cmd) {
+        const char* failed_step{};
+        u32 error{};
+        ready = CreateFeature(*cmd, render, output, reversed, use_hdr, auto_exposure,
+                              settings.quality, settings.preset, failed_step, error);
+        if (!ready) {
+            LOG_WARNING(Render_Vulkan, "NGX prewarm {} failed ({:#x}); retrying at evaluation",
+                        failed_step, error);
+        }
+    });
+    scheduler.InvalidateState();
+    scheduler.WaitWorker();
+    if (ready) {
+        LOG_INFO(Render_Vulkan, "NGX prewarmed {}x{} -> {}x{}", render.width, render.height,
+                 output.width, output.height);
+    } else {
+        // The candidate can be discarded after this call; retire its output transition first.
+        scheduler.Finish();
+    }
+    return ready;
+}
+
 /// Record native DLSS and optional neural rendering, recreating changed resources and reporting
 /// fallback on failure.
 bool NvidiaDlssUpscaler::Upscale(const Inputs &in) {
@@ -187,14 +301,13 @@ bool NvidiaDlssUpscaler::Upscale(const Inputs &in) {
     PrepareNeuralRendering(in, requested);
     const bool hdr = in.hdr && EnvInt("EDEN_NX2_DLSS_HDR", 1) != 0;
     const bool auto_exposure = in.hdr && EnvInt("EDEN_NX2_DLSS_AUTO_EXPOSURE", 1) != 0;
-    const auto preset = PresetFor(neural_options.preset);
     const Image out{*output_view,
                     *output_image,
                     VK_FORMAT_R16G16B16A16_SFLOAT,
                     {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1},
                     VK_IMAGE_ASPECT_COLOR_BIT};
     scheduler.RequestOutsideRenderPassOperationContext();
-    scheduler.Record([this, in, out, hdr, auto_exposure, preset, neural_style, neural_options,
+    scheduler.Record([this, in, out, hdr, auto_exposure, neural_style, neural_options,
                       reset = in.reset || options_changed](vk::CommandBuffer cmdbuf) {
         const auto &api = Ngx::GetApi();
         const auto clear_output = [&] {
@@ -221,76 +334,13 @@ bool NvidiaDlssUpscaler::Upscale(const Inputs &in) {
             clear_output();
             return;
         }
-        // NGX is not thread-safe. Allocate, configure and evaluate on the scheduler worker;
-        // feature release on the rendering thread follows Finish() or renderer shutdown.
-        if (!parameters) {
-            const auto result = api.allocate_parameters(&parameters);
-            if (NVSDK_NGX_FAILED(result) || !parameters) {
-                fail("parameter allocation", result);
-                return;
-            }
-        }
-        if (!feature) {
-            NVSDK_NGX_Parameter* caps{};
-            const auto cap_result = api.capabilities(&caps);
-            SCOPE_EXIT { if (caps) api.destroy_parameters(caps); };
-            if (NVSDK_NGX_FAILED(cap_result) || !caps) {
-                fail("capability query", cap_result);
-                return;
-            }
-            namespace Mode = VideoCommon::DlssMode;
-            const auto selected = Mode::Select(
-                neural_options.quality, {in.render_size.width, in.render_size.height},
-                {in.upscale_size.width, in.upscale_size.height},
-                [&](Settings::NvidiaDlssQuality quality) {
-                    return QueryRange(caps, in.upscale_size, quality);
-                });
-            if (selected.fallback) {
-                LOG_WARNING(Render_Vulkan, "NVIDIA DLSS requested {} but using {} for {}x{} -> {}x{}",
-                    Settings::CanonicalizeEnum(neural_options.quality),
-                    selected.mode ? Settings::CanonicalizeEnum(*selected.mode) : "FSR 3.1",
-                    in.render_size.width, in.render_size.height,
-                    in.upscale_size.width, in.upscale_size.height);
-            }
-            if (!selected.mode) {
-                fail("unsupported render/output size", NVSDK_NGX_Result_FAIL_InvalidParameter);
-                return;
-            }
-            evaluated_mode = *selected.mode;
-            LOG_INFO(Render_Vulkan, "NVIDIA DLSS (NGX): {}x{} -> {}x{}, mode {}, preset {}, {}",
-                in.render_size.width, in.render_size.height, in.upscale_size.width,
-                in.upscale_size.height, Settings::CanonicalizeEnum(evaluated_mode), preset,
-                hdr ? "HDR" : "LDR");
-            parameters->Reset();
-            parameters->Set(NVSDK_NGX_Parameter_Width, in.render_size.width);
-            parameters->Set(NVSDK_NGX_Parameter_Height, in.render_size.height);
-            parameters->Set(NVSDK_NGX_Parameter_OutWidth, in.upscale_size.width);
-            parameters->Set(NVSDK_NGX_Parameter_OutHeight, in.upscale_size.height);
-            parameters->Set(NVSDK_NGX_Parameter_PerfQualityValue, static_cast<int>(ModeFor(evaluated_mode)));
-            int flags = NVSDK_NGX_DLSS_Feature_Flags_MVLowRes;
-            if (in.depth_inverted)
-                flags |= NVSDK_NGX_DLSS_Feature_Flags_DepthInverted;
-            if (hdr)
-                flags |= NVSDK_NGX_DLSS_Feature_Flags_IsHDR;
-            if (auto_exposure)
-                flags |= NVSDK_NGX_DLSS_Feature_Flags_AutoExposure;
-            parameters->Set(NVSDK_NGX_Parameter_DLSS_Feature_Create_Flags, flags);
-            parameters->Set(NVSDK_NGX_Parameter_CreationNodeMask, 1u);
-            parameters->Set(NVSDK_NGX_Parameter_VisibilityNodeMask, 1u);
-            for (const char *key : {NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_DLAA,
-                                    NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Quality,
-                                    NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Balanced,
-                                    NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_Performance,
-                                    NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_UltraPerformance,
-                                    NVSDK_NGX_Parameter_DLSS_Hint_Render_Preset_UltraQuality}) {
-                parameters->Set(key, preset);
-            }
-            const auto result = api.create(*device.GetLogical(), *cmdbuf,
-                                           NVSDK_NGX_Feature_SuperSampling, parameters, &feature);
-            if (NVSDK_NGX_FAILED(result) || !feature) {
-                fail("feature creation", result);
-                return;
-            }
+        const char* failed_step{};
+        u32 error{};
+        if (!CreateFeature(*cmdbuf, in.render_size, in.upscale_size, in.depth_inverted, hdr,
+                           auto_exposure, neural_options.quality, neural_options.preset,
+                           failed_step, error)) {
+            fail(failed_step, static_cast<NVSDK_NGX_Result>(error));
+            return;
         }
         auto color = Resource(in.color, in.render_size);
         auto depth = Resource(in.depth, in.render_size);
@@ -346,7 +396,11 @@ bool NvidiaDlssUpscaler::Upscale(const Inputs &in) {
             last_evaluation.store(static_cast<u32>(evaluated_mode) |
                 (static_cast<u32>(neural_options.quality) << 8) |
                 (static_cast<u32>(neural_options.preset) << 16), std::memory_order_relaxed);
-            evaluations.fetch_add(1, std::memory_order_release);
+            if (evaluations.fetch_add(1, std::memory_order_release) == 0) {
+                LOG_INFO(Render_Vulkan, "NVIDIA DLSS (NGX) evaluated successfully: {}x{} -> {}x{}",
+                         in.render_size.width, in.render_size.height, in.upscale_size.width,
+                         in.upscale_size.height);
+            }
             Ngx::ReportEvaluation();
             if (neural_rendering) {
                 NR::Frame frame;

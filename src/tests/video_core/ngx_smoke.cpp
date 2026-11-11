@@ -143,6 +143,25 @@ void RenderCases(const Device& device, u32 scale, bool request_neural, bool expe
         Settings::NvidiaDlssRuntimeSettings{Quality::UltraPerformance, Neural::Off, 100, 100, 100, true, Settings::NvidiaDlssPreset::J},
         Settings::NvidiaDlssRuntimeSettings{Quality::Native, Neural::Off, 100, 100, 100, true, Settings::NvidiaDlssPreset::NvidiaDefault},
         Settings::NvidiaDlssRuntimeSettings{Quality::Automatic, Neural::Natural}};
+    Settings::values.nvidia_dlss_quality = cases[0].quality;
+    Settings::values.nvidia_dlss_preset = cases[0].preset;
+    Settings::RefreshNvidiaDlssRuntimeSettings();
+    {
+        const auto create = api.create;
+        SCOPE_EXIT { api.create = create; };
+        api.create = [](VkDevice, VkCommandBuffer, NVSDK_NGX_Feature,
+                        NVSDK_NGX_Parameter*, NVSDK_NGX_Handle**) {
+            return NVSDK_NGX_Result_FAIL_FeatureNotSupported;
+        };
+        NvidiaDlssUpscaler candidate{device, scheduler, allocator};
+        Require(!candidate.Prewarm(input_extent, {480 * scale, 270 * scale}, true, false),
+                "Failed prewarm was accepted");
+    }
+    Require(NvidiaDlss::IsAvailable(), "Failed prewarm disabled the runtime");
+    Require(!upscaler.Prewarm({0, 0}, {480 * scale, 270 * scale}, true, false),
+            "Invalid prewarm dimensions were accepted");
+    Require(upscaler.Prewarm(input_extent, {480 * scale, 270 * scale}, true, false),
+            "Prewarm failed");
     u64 neural_frames{};
     std::array<double, 3> natural_reset{};
     for (size_t frame = 0; frame < cases.size(); ++frame) {
